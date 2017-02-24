@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<base target="_parent"/>
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
+<head>
+<!-- Do not include tb_layout.css in block reports - it causes continuous scrolling -->
+<link type="text/css" rel="stylesheet" href="/site_media/resources/styles/tb-styles.min.css" />
+<link type="text/css" rel="stylesheet" href="/site_media/jquery/css/aristo/jquery-ui-1.8.7.custom.css" />
+<link type="text/css" rel="stylesheet" href="/site_media/resources/styles/print.css" media="print" />
+
+<link type="text/css" rel="stylesheet" href="lifechart/pseudo-bootstrap.css" />
+<link rel="stylesheet" type="text/css" href="lifechart/lifegrid.css"/>
+
+{% load humanize %}
+
+<style type="text/css">
+   body {background:white}
+</style>
+
+
+<title>Gaps in Coverage Report</title>
+</head>
+<body>
+<div>
+  <table id="barcodes" style="width:100%">
+    <thead>
+    <tr>
+      <th>Barcode</th>
+      <th>Sample</th>
+      <th>Number of gaps (bp)</th>
+      <th>Files</th>
+    </tr>
+    </thead>
+    <tr>
+      <td>
+        {{ reportData }}
+      </td>
+    </tr>
+    {% for row in context['report'] %}
+    <tr>
+      <td> {{ row["barcode"] }}</td>
+      <td> {{ row["sample"] }}</td>
+      <td> {{ row["no_gaps"] }}</td>
+      <td> {{ row["gaps_file"] }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+</body>
+</html>
