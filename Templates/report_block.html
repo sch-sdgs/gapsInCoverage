@@ -33,10 +33,10 @@
     </thead>
     <tr>
       <td>
-        {{ reportData }}
+        {{ report }}
       </td>
     </tr>
-    {% for row in context['report'] %}
+    {% for row in report %}
     <tr>
       <td> {{ row["barcode"] }}</td>
       <td> {{ row["sample"] }}</td>
