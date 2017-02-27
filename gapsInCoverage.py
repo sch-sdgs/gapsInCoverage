@@ -35,8 +35,11 @@ class gapsInCoverage(IonPlugin):
             settings.configure(DEBUG=False, TEMPLATE_DEBUG=False,
                                INSTALLED_APPS=('django.contrib.humanize',),
                                TEMPLATE_DIRS=(os.path.join(plugin_dir, 'Templates'),))
+        print reportData
         with open(reportName, 'w') as report:
             report.write(render_to_string(reportTemplate, {'report' :reportData}))
+
+        report.close()
 
     def load_startpluginjson(self):
         self.log.info('Reading from startplugin.json')
