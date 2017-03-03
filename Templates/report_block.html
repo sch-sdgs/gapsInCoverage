@@ -28,7 +28,9 @@
       <th>Barcode</th>
       <th>Sample</th>
       <th>Number of gaps (bp)</th>
-      <th>Files</th>
+      <th>Min. exon coverage</th>
+      <th>Min. intron coverage</th>
+      <th>Excel file</th>
     </tr>
     </thead>
     {% for i in report %}
@@ -36,7 +38,9 @@
       <td>{{ i.barcode }}</td>
       <td>{{ i.sample }}</td>
       <td>{{ i.no_gaps }}</td>
-      <td>{{ i.gaps_file }}</td>
+      <td>{{ i.min_exon_cov }}</td>
+      <td>{{ i.min_intron_cov }}</td>
+      <td>{{ i.excel_file }}</td>
     </tr>
     {% endfor %}
   </table>
