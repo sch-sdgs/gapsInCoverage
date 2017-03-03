@@ -3,6 +3,7 @@
 import os
 import glob
 import json
+import numpy
 import traceback
 import pysam
 import subprocess
@@ -82,12 +83,37 @@ class gapsInCoverage(IonPlugin):
             print('Error executing command: ' + str(e.returncode))
             exit(1)
 
+    def get_coverage(self, results_dir, barcode, prefix):
+        self.run_command('sed 1d ' + os.path.join(results_dir, (barcode + '_' + prefix + '_depth_base.txt')) + '| sort -n -k 3,3 | cut -f3 | head -1 > ' + os.path.join(results_dir, barcode + '_min' + prefix + 'Coverage.txt'))
+        with open (os.path.join(results_dir, barcode + '_min' + prefix + 'Coverage.txt')) as min_cov_file:
+            min_cov = min_cov_file.readline()
+        min_cov_file.close()
+        return min_cov
+
+    def write_to_excel(self, outfile, alamut_file, cov_file):
+        outputfile = open(outfile)
+        with open (alamut_file) as gapsfile:
+            for line in gapsfile:
+                # if 'chromosome' in line:
+                #     continue
+                # else:
+                    chromosome, bp_pos, region, depth = line.split('\t')
+                    # with open (cov_file) as covfile:
+                    #     for lin in covfile:
+                    #         array = lin.split('\t')
+                    #         if (array[0] == chromosome) and (array[1] == bp_pos + 1):
+
+                outputfile.write(line+'\n')
+        return outfile
+
+
     def launch(self, data=None):
         self.log.info('Launching Plugin')
         data = self.load_startpluginjson()
         #print json.dumps(data, indent=4)
         info = {}
         results_dir = data['runinfo']['plugin']['results_dir']
+        run_name = data['expmeta']['results_name']
         print "Results directory: "
         print results_dir + '\n'
         block_file = os.path.join(results_dir,'gapsInCoverage_block.html')
@@ -130,7 +156,7 @@ class gapsInCoverage(IonPlugin):
             print "Gaps in introns: " + str(intronic_gaps)
             print "Total gaps: " + str(total_gaps)
 
-            ##generate all_gaps.txt
+            ##generate gaps files
 
             gaps_bed_file = self.concat_files(os.path.join(results_dir, (barcode + '_exonic_depth_base_filtered.txt')), os.path.join(results_dir, (barcode + '_intronic_depth_base_filtered.txt')), results_dir, barcode, '_gaps')
             depth_base_file = self.concat_files(os.path.join(results_dir, (barcode + '_exonic_depth_base.txt')), os.path.join(results_dir, (barcode + '_intronic_depth_base.txt')), results_dir, barcode, '_depth_base')
@@ -140,7 +166,12 @@ class gapsInCoverage(IonPlugin):
             self.run_command(('/home/ionadmin/bedtools2/bin/intersectBed -wb -a ' + os.path.join(results_dir, (bed_name+'_noheader.bed')) + ' -b ' + gaps_bed_file + ' | cut -f1,2,4,12 | awk \'BEGIN{print "chromosome\tbp_pos\tregion\tdepth"}1\' > ' + gaps_in_sequencing))
             self.run_command(('awk \'NR==1 {print $0} NR>1 {print ($1"\t"$2+1"\t"$3"\t"$4)}\' ' + gaps_in_sequencing + ' > ' + alamut_file))
 
-            gaps_info = {'barcode': barcode, 'sample': info[barcode]["sample"], 'no_gaps': total_gaps, 'depth_per_base': depth_base_file, 'gaps_file': gaps_in_sequencing, 'alamut_gaps_file': alamut_file}
+            min_exon_cov = self.get_coverage(results_dir, barcode, 'exonic')
+            min_intron_cov = self.get_coverage(results_dir, barcode, 'intronic')
+
+            excel_file = self.write_to_excel(os.path.join('/results/for_review', run_name, barcode + '_' + info[barcode]['sample'] + 'xlsx'), alamut_file, depth_base_file)
+
+            gaps_info = {'barcode': barcode, 'sample': info[barcode]["sample"], 'no_gaps': total_gaps, 'min_exon_cov': min_exon_cov, 'min_intron_cov': min_intron_cov, 'depth_per_base': depth_base_file, 'gaps_file': gaps_in_sequencing, 'alamut_gaps_file': alamut_file, 'excel_file': excel_file}
             gaps_result.append(gaps_info)
 
         #print json.dumps(info, indent=4)
