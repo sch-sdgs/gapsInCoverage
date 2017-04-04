@@ -5,46 +5,12 @@ import glob
 import json
 import argparse
 import subprocess
-import requests
-#from ion.utils import blockprocessing
-#from ion.plugin import *
-from django.conf import settings
-from django import template
-from django.template.loader import render_to_string
-from django.conf import global_settings
-# global_settings.LOGGING_CONFIG=None
-
-
-# class gapsInCoverage(IonPlugin):
-#
-#     """
-#     gapsInCoverage plugin
-#     """
-#
-#     version = '1.0'
-#     allow_autorun = True
-#     major_block = True
-
-# def createreport(reportName, reportTemplate, reportData, data):
-#     print "Creating Report\n"
-#     # print json.dumps(reportData, indent=4)
-#     # configure django to use the templates folder and various installed apps
-#     if not settings.configured:
-#         plugin_dir = data['runinfo']['plugin']['path']
-#         print plugin_dir
-#         settings.configure(DEBUG=False, TEMPLATE_DEBUG=False,
-#                            INSTALLED_APPS=('django.contrib.humanize',),
-#                            TEMPLATE_DIRS=(os.path.join(plugin_dir, 'Templates'),))
-#     print reportData
-#     with open(reportName, 'w') as report:
-#         report.write(render_to_string(reportTemplate, {'report' :reportData}))
-#
-#     report.close()
+from helpers import FileParsers
+import re
 
 def load_startpluginjson(jsonfile):
     with open(jsonfile, 'r') as fin:
         return json.load(fin)
-
 
 def remove_header(bedfile, results_dir, prefix):
     print "Removing header line from BED " + bedfile
@@ -83,17 +49,17 @@ def run_command(cmd):
         print(cmd)
         print('Error executing command: ' + str(e.returncode))
         exit(1)
-
-def get_coverage(results_dir, barcode, prefix):
-    run_command('sed 1d ' + os.path.join(results_dir, (barcode + '_' + prefix + '_depth_base.txt')) + ' | sort -n -k 3,3 | cut -f3 | head -1 > ' + os.path.join(results_dir, barcode + '_min' + prefix + 'Coverage.txt'))
-    with open (os.path.join(results_dir, barcode + '_min' + prefix + 'Coverage.txt')) as min_cov_file:
-        min_cov = min_cov_file.readline().rstrip()
-    min_cov_file.close()
-    return min_cov
+#
+# def get_coverage(results_dir, barcode, prefix):
+#     run_command('sed 1d ' + os.path.join(results_dir, (barcode + '_' + prefix + '_depth_base.txt')) + ' | sort -n -k 3,3 | cut -f3 | head -1 > ' + os.path.join(results_dir, barcode + '_min' + prefix + 'Coverage.txt'))
+#     with open (os.path.join(results_dir, barcode + '_min' + prefix + 'Coverage.txt')) as min_cov_file:
+#         min_cov = min_cov_file.readline().rstrip()
+#     min_cov_file.close()
+#     return min_cov
 
 def write_to_excel(outfile, alamut_file, cov_file, num_gaps, min_cov):
     outputfile = open(outfile, mode='w')
-    if num_gaps > 0:
+    if int(num_gaps) > 0:
         with open (alamut_file) as gapsfile:
             for line in gapsfile:
                 line = line.rstrip()
@@ -119,14 +85,13 @@ def write_to_excel(outfile, alamut_file, cov_file, num_gaps, min_cov):
                     covfile.close()
         gapsfile.close()
     else:
-        outputfile.write('No gaps found\nMinimum coverage = '+min_cov)
+        outputfile.write('No gaps found\nMinimum coverage = ' + str(min_cov))
     outputfile.close()
     return outfile
 
 def start(jsonfile):
     print "loading json file"
     data = load_startpluginjson(jsonfile)
-    #print json.dumps(data, indent=4)
     info = {}
     results_dir = data['runinfo']['plugin']['results_dir']
     run_name = data['expmeta']['results_name']
@@ -134,7 +99,6 @@ def start(jsonfile):
         os.mkdir('/results/for_review/' + run_name)
     print "Results directory: "
     print results_dir + '\n'
-    block_file = os.path.join(results_dir,'gapsInCoverage_block.html')
     for sample_name in data["plan"]["barcodedSamples"]:
         for barcode in data["plan"]["barcodedSamples"][sample_name]["barcodeSampleInfo"]:
             info[barcode] = {}
@@ -174,40 +138,73 @@ def start(jsonfile):
         print "Gaps in exons: " + str(exonic_gaps)
         print "Gaps in introns: " + str(intronic_gaps)
         print "Total gaps: " + str(total_gaps)
+        run_command('/home/ionadmin/sambamba_v0.6.5 depth region -o ' + os.path.join(results_dir, (barcode + '_exonic_depth_region.txt')) + ' -c 0 -T 50 -q 0 -L ' + bed_name+'_exonic_noheader.bed ' + bam)
+        cov_hash={}
+        with open (os.path.join(results_dir, (barcode + '_exonic_depth_region.txt'))) as regions_file:
+            for line in regions_file:
+                if 'chrom' not in line:
+                    array = line.split('\t')
+                    cov_hash[array[3]] = array[-2]
 
         ##generate gaps files
-
         gaps_bed_file = concat_files(os.path.join(results_dir, (barcode + '_exonic_depth_base_filtered.txt')), os.path.join(results_dir, (barcode + '_intronic_depth_base_filtered.txt')), results_dir, barcode, '_gaps')
         gaps_in_sequencing = os.path.join(results_dir, barcode + '_gaps_in_sequencing.txt')
         alamut_file = os.path.join(results_dir, barcode + '_gaps_in_sequencing_alamut.txt')
 
         run_command(('/home/ionadmin/bedtools2/bin/intersectBed -wb -a ' + os.path.join(results_dir, (bed_name+'_noheader.bed')) + ' -b ' + gaps_bed_file + ' | cut -f1,2,4,12 | awk \'BEGIN{print "chromosome\tbp_pos\tregion\tdepth"}1\' > ' + gaps_in_sequencing))
         run_command(('awk \'NR==1 {print $0} NR>1 {print ($1"\t"$2+1"\t"$3"\t"$4)}\' ' + gaps_in_sequencing + ' > ' + alamut_file))
+        with open (alamut_file) as afile:
+            seen_regions=[]
+            gap_hash={}
+            gap_hash['introns']=[]
+            gap_hash['exons']=[]
+            for line in afile:
+                if 'region' not in line:
+                    region = line.split('\t')[2]
+                    if region not in seen_regions:
+                        if region not in cov_hash:
+                            print "Error - region not in cov_hash"
+                        elif cov_hash[region] == 100:
+                            gap_hash['introns'].append(re.sub('_NM.*', '', region))
+                        else:
+                            gap_hash['exons'].append(re.sub('_NM.*', '', region))
+
+                        seen_regions.append(region)
+
 
         ### Parse depth base bed file ###
+        f = FileParsers.FileParser()
+        exfile = open(os.path.join(results_dir, barcode + "_exonic_coverage_summary.txt"), 'w')
+        ex_cov_results = f.parse_sambamda_depth_bases(os.path.join(results_dir, barcode + "_exonic_depth_base.txt")).toJsonDict()
 
+        exfile.write(json.dumps(ex_cov_results, indent=4))
+        exfile.close()
+        intfile = open(os.path.join(results_dir, barcode + "_intronic_coverage_summary.txt"), 'w')
+        int_cov_results = f.parse_sambamda_depth_bases(os.path.join(results_dir, barcode + "_intronic_depth_base.txt")).toJsonDict()
+        intfile.write(json.dumps(int_cov_results, indent=4))
+        intfile.close()
 
-        min_exon_cov = get_coverage(results_dir, barcode, 'exonic')
-        min_intron_cov = get_coverage(results_dir, barcode, 'intronic')
+        min_exon_cov = int(ex_cov_results['min'])
+        print min_exon_cov
+        min_intron_cov = int(int_cov_results['min'])
+        print min_intron_cov
+
         if min_intron_cov<= min_exon_cov:
             min_cov = min_intron_cov
         else:
             min_cov = min_exon_cov
+        print min_cov
 
         excel_file = write_to_excel(os.path.join('/results/for_review', run_name, barcode + '_' + info[barcode]['sample'] + '.xls'), alamut_file, depth_base_file, total_gaps, min_cov)
 
-        gaps_info = {'barcode': barcode, 'sample': info[barcode]["sample"], 'no_gaps': total_gaps, 'min_exon_cov': min_exon_cov, 'min_intron_cov': min_intron_cov, 'depth_per_base': depth_base_file, 'gaps_file': gaps_in_sequencing, 'alamut_gaps_file': alamut_file, 'excel_file': excel_file}
+        gaps_info = {'barcode': barcode, 'sample': info[barcode]["sample"], 'no_gaps': total_gaps, 'min_exon_cov': min_exon_cov, 'min_intron_cov': min_intron_cov, 'exon_gaps': ', '.join(gap_hash['exons']), 'intron_gaps': ', '.join(gap_hash['introns'])}
         gaps_result.append(gaps_info)
 
 
-    #print json.dumps(info, indent=4)
+
     print "Results:"
     print json.dumps(gaps_result, indent=4)
-    return data, gaps_result
-    #todo pass data and gaps_result back to first python script
-
-
-    #createreport(block_file, 'report_block.html', gaps_result, data)
+    return gaps_result, results_dir
 
 def plugin_main():
     print "loading arguments"
@@ -215,8 +212,9 @@ def plugin_main():
     parser.add_argument('--startpluginjson', metavar='startpluginjson', type=str, help='name of startplugin.json file')
     args = parser.parse_args()
     startpluginjson = args.startpluginjson
-    (data, gaps_result) = start(startpluginjson)
-    return data, gaps_result
+    (gaps_result, results_dir) = start(startpluginjson)
+    with open(os.path.join(results_dir,'results.json'), mode='w') as outfile:
+        json.dump(gaps_result, outfile, indent=4)
 
 if __name__ == '__main__':
     exit(plugin_main())

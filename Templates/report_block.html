@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" xmlns:file="http://www.w3.org/1999/xhtml">
 <base target="_parent"/>
 <META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8">
 <head>
@@ -22,7 +22,7 @@
 </head>
 <body>
 <div>
-  <table id="barcodes" style="width:100%">
+  <table id="barcodes">
     <thead>
     <tr>
       <th>Barcode</th>
@@ -30,7 +30,8 @@
       <th>Number of gaps (bp)</th>
       <th>Min. exon coverage</th>
       <th>Min. intron coverage</th>
-      <th>Excel file</th>
+      <th>Exon gaps</th>
+      <th>Intron gaps only</th>
     </tr>
     </thead>
     {% for i in report %}
@@ -40,10 +41,17 @@
       <td>{{ i.no_gaps }}</td>
       <td>{{ i.min_exon_cov }}</td>
       <td>{{ i.min_intron_cov }}</td>
-      <td>{{ i.excel_file }}</td>
+      <td>{{ i.exon_gaps }}</td>
+      <td>{{ i.intron_gaps }}</td>
     </tr>
     {% endfor %}
   </table>
+</div>
+<div>
+  <div>
+    <br>
+    Path to excel folder: \\10.182.155.28\for_review\1610248_PKD
+  </div>
 </div>
 </body>
 </html>

@@ -28,13 +28,11 @@ class gapsInCoverage(IonPlugin):
     allow_autorun = True
     major_block = True
 
-    def createreport(self,reportName, reportTemplate, reportData, data):
+    def createreport(self,reportName, reportTemplate, reportData, plugin_dir):
         print "Creating Report\n"
         # print json.dumps(reportData, indent=4)
         # configure django to use the templates folder and various installed apps
         if not settings.configured:
-            plugin_dir = data['runinfo']['plugin']['path']
-            print plugin_dir
             settings.configure(DEBUG=False, TEMPLATE_DEBUG=False,
                                INSTALLED_APPS=('django.contrib.humanize',),
                                TEMPLATE_DIRS=(os.path.join(plugin_dir, 'Templates'),))
@@ -53,10 +51,17 @@ class gapsInCoverage(IonPlugin):
         ], stdout=PIPE, shell=False)
         plugin.communicate()
 
-        #todo get data ans gaps_result from _main.py
+        ## read results.json
+
+        with open('startplugin.json', 'r') as fin:
+            data = json.load(fin)
+        plugin_dir = data['runinfo']['plugin']['path']
         results_dir = data['runinfo']['plugin']['results_dir']
+        with open('results.json', 'r') as ftwo:
+            gaps_result = json.load(ftwo)
+
         block_file = os.path.join(results_dir, 'gapsInCoverage_block.html')
-        self.createreport(block_file, 'report_block.html', gaps_result, data)
+        self.createreport(block_file, 'report_block.html', gaps_result, plugin_dir)
 
 
 if __name__ == '__main__':
