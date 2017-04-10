@@ -14,7 +14,12 @@
 {% load humanize %}
 
 <style type="text/css">
-   body {background:white}
+   body {background: white}
+   table {background: #f5f5f5}
+   tr:nth-child(odd){background-color: #e3e3e3
+   }
+   tr:hover {background-color: #c3c3c3
+   }
 </style>
 
 
@@ -24,23 +29,23 @@
 <div>
   <table id="barcodes">
     <thead>
-    <tr>
-      <th>Barcode</th>
-      <th>Sample</th>
-      <th>Number of gaps (bp)</th>
-      <th>Min. exon coverage</th>
-      <th>Min. intron coverage</th>
-      <th>Exon gaps</th>
-      <th>Intron gaps only</th>
+    <tr style="background: #f5f5f5">
+      <th width="7%">Barcode </th>
+      <th width="8%">Sample</th>
+      <th width="5%" style="text-align: center">Number of gaps (bp)</th>
+      <th width="5%" style="text-align: center">Min. exon coverage</th>
+      <th width="5%" style="text-align: center">Min. intron coverage</th>
+      <th width="50%">Exon gaps</th>
+      <th width="20%">Intron gaps only</th>
     </tr>
     </thead>
     {% for i in report %}
     <tr>
       <td>{{ i.barcode }}</td>
       <td>{{ i.sample }}</td>
-      <td>{{ i.no_gaps }}</td>
-      <td>{{ i.min_exon_cov }}</td>
-      <td>{{ i.min_intron_cov }}</td>
+      <td style="text-align: center">{{ i.no_gaps }}</td>
+      <td style="text-align: center">{{ i.min_exon_cov }}</td>
+      <td style="text-align: center">{{ i.min_intron_cov }}</td>
       <td>{{ i.exon_gaps }}</td>
       <td>{{ i.intron_gaps }}</td>
     </tr>

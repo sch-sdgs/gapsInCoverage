@@ -27,14 +27,14 @@ def runsambamba(results_dir, bedfile, barcode, bam, max_cov=None, prefix=None):
     print "Running Sambamba " + barcode
     if prefix:
         outputfile = os.path.join(results_dir, (barcode + prefix + '_depth_base.txt'))
-        run_command('/home/ionadmin/sambamba_v0.6.5 depth base -o ' + outputfile + ' -c 0 -q 0 -L ' + bedfile + ' ' + bam)
+        run_command('/home/ionadmin/sambamba_v0.6.5 depth base -o ' + outputfile + ' -m -c 0 -q 0 -L ' + bedfile + ' ' + bam)
         outputfile_filtered = os.path.join(results_dir, (barcode + prefix + '_depth_base_filtered.txt'))
-        run_command('/home/ionadmin/sambamba_v0.6.5 depth base -o ' + outputfile_filtered + ' -c 0 -C ' + str(max_cov) + ' -q 0 -L ' + bedfile + ' ' + bam)
+        run_command('/home/ionadmin/sambamba_v0.6.5 depth base -o ' + outputfile_filtered + ' -m -c 0 -C ' + str(max_cov) + ' -q 0 -L ' + bedfile + ' ' + bam)
         num_lines = sum(1 for line in open(outputfile_filtered))
         return num_lines - 1
     else:
         outputfile = os.path.join(results_dir, (barcode + '_depth_base.txt'))
-        run_command('/home/ionadmin/sambamba_v0.6.5 depth base -o ' + outputfile + ' -c 0 -q 0 -L ' + bedfile + ' ' + bam)
+        run_command('/home/ionadmin/sambamba_v0.6.5 depth base -o ' + outputfile + ' -m -c 0 -q 0 -L ' + bedfile + ' ' + bam)
         return outputfile
 
 def concat_files(file_one, file_two, results_dir, barcode, prefix):
@@ -103,9 +103,19 @@ def start(jsonfile):
         for barcode in data["plan"]["barcodedSamples"][sample_name]["barcodeSampleInfo"]:
             info[barcode] = {}
             info[barcode]["sample"] = sample_name
-            #info[barcode]["bed"] = data["plan"]["barcodedSamples"][sample_name]["barcodeSampleInfo"][barcode]["targetRegionBedFile"]
-            info[barcode]["bed"] = '/results/uploads/BED/6/hg19/unmerged/detail/PKD.bed'
-            info[barcode]["exonicbed"] = '/results/uploads/BED/7/hg19/unmerged/detail/PKD_exonic.bed'
+            print "Sample = ", info[barcode]["sample"]
+            info[barcode]["bed"] = data["plan"]["barcodedSamples"][sample_name]["barcodeSampleInfo"][barcode]["targetRegionBedFile"]
+            print "BED = ", info[barcode]["bed"]
+            #info[barcode]["bed"] = '/results/uploads/BED/6/hg19/unmerged/detail/PKD.bed'
+            if 'PKD' in info[barcode]["bed"]:
+                info[barcode]["exonicbed"] = '/results/uploads/BED/61/hg19_PKD_pseudogenes_masked/unmerged/detail/PKD_exonic.bed'
+            elif 'NBS1' in info[barcode]["bed"]:
+                info[barcode]["exonicbed"] = '/results/uploads/BED/58/hg19/unmerged/detail/NBS1_25_exonic.bed'
+            elif 'NBS2' in info[barcode]["bed"]:
+                info[barcode]["exonicbed"] = '/results/uploads/BED/59/hg19/unmerged/detail/NBS2_25_exonic.bed'
+            elif 'IEM' in info[barcode]["bed"]:
+                info[barcode]["exonicbed"] = '/results/uploads/BED/60/hg19/unmerged/detail/IEM_mini_v2_exonic.bed'
+            print "Exonic BED = ", info[barcode]["exonicbed"]
             bed_name = os.path.basename(info[barcode]["bed"]).replace(".bed", "")
 
             if os.path.isfile(os.path.join(results_dir, (bed_name + '_noheader.bed'))):
@@ -126,9 +136,13 @@ def start(jsonfile):
     bam_dir = data["runinfo"]["alignment_dir"]
     bams = glob.glob(bam_dir + "/*.bam")
     gaps_result = []
+    sample_gaps = {}
+    sample_gaps['intronic']={}
+    sample_gaps['exonic']={}
     for bam in bams:
         barcode = os.path.basename(bam).replace("_rawlib.bam", "")
         info[barcode]["bam"] = bam
+        print "BAM = ", info[barcode]["bam"]
         bed_name = os.path.basename(info[barcode]["bed"]).replace(".bed", "")
 
         depth_base_file = runsambamba(results_dir, os.path.join(results_dir, (bed_name+'_noheader.bed')), barcode, bam)
@@ -161,14 +175,26 @@ def start(jsonfile):
             for line in afile:
                 if 'region' not in line:
                     region = line.split('\t')[2]
+                    new_region = re.sub('_NM.*', '', region)
                     if region not in seen_regions:
                         if region not in cov_hash:
                             print "Error - region not in cov_hash"
-                        elif cov_hash[region] == 100:
-                            gap_hash['introns'].append(re.sub('_NM.*', '', region))
                         else:
-                            gap_hash['exons'].append(re.sub('_NM.*', '', region))
-
+                            print info[barcode]["sample"]
+                            print new_region
+                            ## fix this bit ##
+                            if cov_hash[region] == 100:
+                                gap_hash['introns'].append(new_region)
+                                if new_region in sample_gaps['intronic']:
+                                    sample_gaps['intronic'][new_region]['samples'].append(info[barcode]["sample"])
+                                else:
+                                    sample_gaps['intronic'][new_region] = {'samples': [info[barcode]["sample"]]}
+                            else:
+                                gap_hash['exons'].append(new_region)
+                                if new_region in sample_gaps['exonic']:
+                                    sample_gaps['exonic'][new_region]['samples'].append(info[barcode]["sample"])
+                                else:
+                                    sample_gaps['exonic'][new_region] = {'samples': [info[barcode]["sample"]]}
                         seen_regions.append(region)
 
 
@@ -200,8 +226,23 @@ def start(jsonfile):
         gaps_info = {'barcode': barcode, 'sample': info[barcode]["sample"], 'no_gaps': total_gaps, 'min_exon_cov': min_exon_cov, 'min_intron_cov': min_intron_cov, 'exon_gaps': ', '.join(gap_hash['exons']), 'intron_gaps': ', '.join(gap_hash['introns'])}
         gaps_result.append(gaps_info)
 
-
-
+    run_gaps_file = open('/results/for_review/'+run_name+'/run_gaps.xls', mode='w')
+    run_gaps_file.write('Region\tSamples with exon gaps\tSamples with intron gaps only\n')
+    all_regions=[]
+    for reg in sample_gaps['exonic']:
+        all_regions.append(reg)
+    for i_reg in sample_gaps['intronic']:
+        all_regions.append(i_reg)
+    for region in sorted(all_regions):
+        run_gaps_file.write(region+'\t')
+        if region in sample_gaps['exonic']:
+            run_gaps_file.write(', '.join(sample_gaps['exonic'][region]['samples'])+'\t')
+        else:
+            run_gaps_file.write('\t')
+        if region in sample_gaps['intronic']:
+            run_gaps_file.write(', '.join(sample_gaps['intronic'][region]['samples']) + '\n')
+        else:
+            run_gaps_file.write('\n')
     print "Results:"
     print json.dumps(gaps_result, indent=4)
     return gaps_result, results_dir
