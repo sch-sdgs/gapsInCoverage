@@ -7,6 +7,9 @@ import argparse
 import subprocess
 from helpers import FileParsers
 import re
+import xlsxwriter
+
+l={}
 
 def load_startpluginjson(jsonfile):
     with open(jsonfile, 'r') as fin:
@@ -89,6 +92,31 @@ def write_to_excel(outfile, alamut_file, cov_file, num_gaps, min_cov):
     outputfile.close()
     return outfile
 
+def load_region_lengths(bedfile):
+    with open(bedfile) as bf:
+        for line in bf:
+            if 'track' not in line:
+                array = line.split('\t')
+                length = int(array[2]) - int(array[1])
+                name = re.sub('_NM.*', '', array[3])
+                if name not in l:
+                    l[name] = length
+    bf.close()
+    return l
+
+def get_string(chr, start_val, stop_val, id, string):
+    if id == 1:
+        if start_val == stop_val:
+            string = chr + ':' + start_val
+        else:
+            string = chr + ':' + start_val + '-' + stop_val
+    else:
+        if start_val == stop_val:
+            string = string + ', ' + start_val
+        else:
+            string = string + ', ' + start_val + '-' + stop_val
+    return string
+
 def start(jsonfile):
     print "loading json file"
     data = load_startpluginjson(jsonfile)
@@ -106,17 +134,20 @@ def start(jsonfile):
             print "Sample = ", info[barcode]["sample"]
             info[barcode]["bed"] = data["plan"]["barcodedSamples"][sample_name]["barcodeSampleInfo"][barcode]["targetRegionBedFile"]
             print "BED = ", info[barcode]["bed"]
-            #info[barcode]["bed"] = '/results/uploads/BED/6/hg19/unmerged/detail/PKD.bed'
-            if 'PKD' in info[barcode]["bed"]:
-                info[barcode]["exonicbed"] = '/results/uploads/BED/61/hg19_PKD_pseudogenes_masked/unmerged/detail/PKD_exonic.bed'
-            elif 'NBS1' in info[barcode]["bed"]:
-                info[barcode]["exonicbed"] = '/results/uploads/BED/58/hg19/unmerged/detail/NBS1_25_exonic.bed'
-            elif 'NBS2' in info[barcode]["bed"]:
-                info[barcode]["exonicbed"] = '/results/uploads/BED/59/hg19/unmerged/detail/NBS2_25_exonic.bed'
-            elif 'IEM' in info[barcode]["bed"]:
-                info[barcode]["exonicbed"] = '/results/uploads/BED/60/hg19/unmerged/detail/IEM_mini_v2_exonic.bed'
-            print "Exonic BED = ", info[barcode]["exonicbed"]
+            info[barcode]["bed"] = '/results/uploads/BED/4/hg19/unmerged/detail/ADPKDv3.bed'
+
+            info[barcode]["exonicbed"] = '/results/uploads/BED/7/hg19/unmerged/detail/PKD_exonic.bed'
+            # if 'PKD' in info[barcode]["bed"]:
+            #     info[barcode]["exonicbed"] = '/results/uploads/BED/61/hg19_PKD_pseudogenes_masked/unmerged/detail/PKD_exonic.bed'
+            # elif 'NBS1' in info[barcode]["bed"]:
+            #     info[barcode]["exonicbed"] = '/results/uploads/BED/58/hg19/unmerged/detail/NBS1_25_exonic.bed'
+            # elif 'NBS2' in info[barcode]["bed"]:
+            #     info[barcode]["exonicbed"] = '/results/uploads/BED/59/hg19/unmerged/detail/NBS2_25_exonic.bed'
+            # elif 'IEM' in info[barcode]["bed"]:
+            #     info[barcode]["exonicbed"] = '/results/uploads/BED/60/hg19/unmerged/detail/IEM_mini_v2_exonic.bed'
+            # print "Exonic BED = ", info[barcode]["exonicbed"]
             bed_name = os.path.basename(info[barcode]["bed"]).replace(".bed", "")
+            l = load_region_lengths(info[barcode]["bed"])
 
             if os.path.isfile(os.path.join(results_dir, (bed_name + '_noheader.bed'))):
                 #print "seen before"
@@ -158,7 +189,8 @@ def start(jsonfile):
             for line in regions_file:
                 if 'chrom' not in line:
                     array = line.split('\t')
-                    cov_hash[array[3]] = array[-2]
+                    region = re.sub('_NM.*', '', array[3])
+                    cov_hash[region] = array[-2]
 
         ##generate gaps files
         gaps_bed_file = concat_files(os.path.join(results_dir, (barcode + '_exonic_depth_base_filtered.txt')), os.path.join(results_dir, (barcode + '_intronic_depth_base_filtered.txt')), results_dir, barcode, '_gaps')
@@ -168,13 +200,15 @@ def start(jsonfile):
         run_command(('/home/ionadmin/bedtools2/bin/intersectBed -wb -a ' + os.path.join(results_dir, (bed_name+'_noheader.bed')) + ' -b ' + gaps_bed_file + ' | cut -f1,2,4,12 | awk \'BEGIN{print "chromosome\tbp_pos\tregion\tdepth"}1\' > ' + gaps_in_sequencing))
         run_command(('awk \'NR==1 {print $0} NR>1 {print ($1"\t"$2+1"\t"$3"\t"$4)}\' ' + gaps_in_sequencing + ' > ' + alamut_file))
         with open (alamut_file) as afile:
+            sp = info[barcode]["sample"]
             seen_regions=[]
             gap_hash={}
             gap_hash['introns']=[]
             gap_hash['exons']=[]
             for line in afile:
                 if 'region' not in line:
-                    region = line.split('\t')[2]
+                    array = line.split('\t')
+                    region = array[2]
                     new_region = re.sub('_NM.*', '', region)
                     if region not in seen_regions:
                         if region not in cov_hash:
@@ -183,19 +217,50 @@ def start(jsonfile):
                             print info[barcode]["sample"]
                             print new_region
                             ## fix this bit ##
-                            if cov_hash[region] == 100:
+                            if cov_hash[region] == '100':
                                 gap_hash['introns'].append(new_region)
-                                if new_region in sample_gaps['intronic']:
-                                    sample_gaps['intronic'][new_region]['samples'].append(info[barcode]["sample"])
-                                else:
-                                    sample_gaps['intronic'][new_region] = {'samples': [info[barcode]["sample"]]}
+                                if new_region not in sample_gaps['intronic']:
+                                    sample_gaps['intronic'][new_region] = {}
+                                sample_gaps['intronic'][new_region][sp] = {}
+                                sample_gaps['intronic'][new_region][sp][1] = {}
+                                sample_gaps['intronic'][new_region][sp][1]['start'] = array[0]+':'+str(array[1])
+                                sample_gaps['intronic'][new_region][sp][1]['stop'] = array[0] + ':' + str(array[1])
+                                flag = 1
+                                # if new_region in sample_gaps['intronic']:
+                                #     sample_gaps['intronic'][new_region]['samples'].append(info[barcode]["sample"])
+                                # else:
+                                #     sample_gaps['intronic'][new_region] = {'samples': [info[barcode]["sample"]]}
                             else:
                                 gap_hash['exons'].append(new_region)
-                                if new_region in sample_gaps['exonic']:
-                                    sample_gaps['exonic'][new_region]['samples'].append(info[barcode]["sample"])
-                                else:
-                                    sample_gaps['exonic'][new_region] = {'samples': [info[barcode]["sample"]]}
+                                if new_region not in sample_gaps['exonic']:
+                                    sample_gaps['exonic'][new_region] = {}
+                                sample_gaps['exonic'][new_region][sp]={}
+                                sample_gaps['exonic'][new_region][sp][1]={}
+                                sample_gaps['exonic'][new_region][sp][1]['start'] = array[0] + ':' + str(array[1])
+                                sample_gaps['exonic'][new_region][sp][1]['stop'] = array[0] + ':' + str(array[1])
+                                flag = 1
+                                # if new_region in sample_gaps['exonic']:
+                                #     sample_gaps['exonic'][new_region]['samples'].append(info[barcode]["sample"])
+                                # else:
+                                #     sample_gaps['exonic'][new_region] = {'samples': [info[barcode]["sample"]]}
                         seen_regions.append(region)
+                    else:
+                        if cov_hash[region] == '100':
+                            if (int(array[1]) - int(sample_gaps['intronic'][new_region][sp][flag]['stop'].split(':')[1])) == 1:
+                                sample_gaps['intronic'][new_region][sp][flag]['stop'] = array[0] + ':' + str(array[1])
+                            else:
+                                flag+=1
+                                sample_gaps['intronic'][new_region][sp][flag] = {}
+                                sample_gaps['intronic'][new_region][sp][flag]['start'] = array[0] + ':' + str(array[1])
+                                sample_gaps['intronic'][new_region][sp][flag]['stop'] = array[0] + ':' + str(array[1])
+                        else:
+                            if (int(array[1]) - int(sample_gaps['exonic'][new_region][sp][flag]['stop'].split(':')[1])) == 1:
+                                sample_gaps['exonic'][new_region][sp][flag]['stop'] = array[0] + ':' + str(array[1])
+                            else:
+                                flag+=1
+                                sample_gaps['exonic'][new_region][sp][flag]={}
+                                sample_gaps['exonic'][new_region][sp][flag]['start'] = array[0] + ':' + str(array[1])
+                                sample_gaps['exonic'][new_region][sp][flag]['stop'] = array[0] + ':' + str(array[1])
 
 
         ### Parse depth base bed file ###
@@ -226,24 +291,89 @@ def start(jsonfile):
         gaps_info = {'barcode': barcode, 'sample': info[barcode]["sample"], 'no_gaps': total_gaps, 'min_exon_cov': min_exon_cov, 'min_intron_cov': min_intron_cov, 'exon_gaps': ', '.join(gap_hash['exons']), 'intron_gaps': ', '.join(gap_hash['introns'])}
         gaps_result.append(gaps_info)
 
-    run_gaps_file = open('/results/for_review/'+run_name+'/run_gaps.xls', mode='w')
-    run_gaps_file.write('Region\tSamples with exon gaps\tSamples with intron gaps only\n')
-    all_regions=[]
+    workbook = xlsxwriter.Workbook('/results/for_review/'+run_name+'/run_gaps.xlsx')
+    worksheet = workbook.add_worksheet("Gaps")
+    bold = workbook.add_format({'bold': True})
+    grey = workbook.add_format({'font_color': 'gray'})
+    worksheet.write('A1', 'Region', bold)
+    worksheet.write('B1', 'Gap Co-ordinates', bold)
+    worksheet.write('C1', 'Total gap length', bold)
+    worksheet.write('D1', 'Total ROI length', bold)
+    worksheet.write('E1', '% of region as gap', bold)
+    worksheet.write('F1', 'Sample', bold)
+
+    row=1
+
+    all_regions = []
     for reg in sample_gaps['exonic']:
         all_regions.append(reg)
     for i_reg in sample_gaps['intronic']:
-        all_regions.append(i_reg)
+        if i_reg not in all_regions:
+            all_regions.append(i_reg)
+
+    with open(os.path.join(results_dir, 'run_gaps.json'), mode='w') as jfile:
+        json.dump(sample_gaps, jfile, indent=4)
+
     for region in sorted(all_regions):
-        run_gaps_file.write(region+'\t')
         if region in sample_gaps['exonic']:
-            run_gaps_file.write(', '.join(sample_gaps['exonic'][region]['samples'])+'\t')
-        else:
-            run_gaps_file.write('\t')
+            for sample in sample_gaps['exonic'][region]:
+                length_c = 0
+                string=''
+                for id in sorted(sample_gaps['exonic'][region][sample]):
+                    chr, stop_val = sample_gaps['exonic'][region][sample][id]['stop'].split(':')  #[0], sample_gaps['exonic'][region][sample][id]['stop'].split(':')[1]
+                    start_val = sample_gaps['exonic'][region][sample][id]['start'].split(':')[1]
+                    length = int(stop_val) - int(start_val) + 1
+                    length_c += length
+                    string = get_string(chr, start_val, stop_val, id, string)
+
+                percent_roi = round((length_c / float(l[region]))*100, 1)
+                worksheet.write(row, 0, region)
+                worksheet.write(row, 1, string)
+                worksheet.write(row, 2, length_c)
+                worksheet.write(row, 3, l[region])
+                worksheet.write(row, 4, percent_roi)
+                worksheet.write(row, 5, sample)
+                row+=1
         if region in sample_gaps['intronic']:
-            run_gaps_file.write(', '.join(sample_gaps['intronic'][region]['samples']) + '\n')
-        else:
-            run_gaps_file.write('\n')
-    print "Results:"
+            for sample in sample_gaps['intronic'][region]:
+                length_c=0
+                string=''
+                for id in sorted(sample_gaps['intronic'][region][sample]):
+                    chr, stop_val = sample_gaps['intronic'][region][sample][id]['stop'].split(':')
+                    start_val = sample_gaps['intronic'][region][sample][id]['start'].split(':')[1]
+                    length = int(stop_val) - int(start_val) + 1
+                    length_c += length
+                    string = get_string(chr, start_val, stop_val, id, string)
+
+                percent_roi = round((length_c / float(l[region])) * 100, 1)
+                worksheet.write(row, 0, region, grey)
+                worksheet.write(row, 1, string, grey)
+                worksheet.write(row, 2, length_c, grey)
+                worksheet.write(row, 3, l[region], grey)
+                worksheet.write(row, 4, percent_roi, grey)
+                worksheet.write(row, 5, sample, grey)
+                row += 1
+
+
+
+    #run_gaps_file = open('/results/for_review/'+run_name+'/run_gaps.xls', mode='w')
+    #run_gaps_file.write('Region\tSamples with exon gaps\tSamples with intron gaps only\n')
+    #all_regions=[]
+    # for reg in sample_gaps['exonic']:
+    #     all_regions.append(reg)
+    # for i_reg in sample_gaps['intronic']:
+    #     all_regions.append(i_reg)
+    # for region in sorted(all_regions):
+    #     run_gaps_file.write(region+'\t')
+    #     if region in sample_gaps['exonic']:
+    #         run_gaps_file.write(', '.join(sample_gaps['exonic'][region]['samples'])+'\t')
+    #     else:
+    #         run_gaps_file.write('\t')
+    #     if region in sample_gaps['intronic']:
+    #         run_gaps_file.write(', '.join(sample_gaps['intronic'][region]['samples']) + '\n')
+    #     else:
+    #         run_gaps_file.write('\n')
+    # print "Results:"
     print json.dumps(gaps_result, indent=4)
     return gaps_result, results_dir
 
