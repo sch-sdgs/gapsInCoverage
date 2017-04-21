@@ -1,26 +1,42 @@
-<?xml version="1.0" encoding="iso-8859-1"?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
     <script type="text/javascript" src="/site_media/jquery/js/jquery-1.6.1.min.js"></script>
-    <style type="text/css">
-      #formwrap {
-       line-height: 2em;
-       background: #eef;
-       margin: 10px;
-       padding: 10px;
-       height: 500px;
-      }
-      body {
-       font-family: "Lucida Grande", "Lucida Sans Unicode", Verdana, Arial, Helvetica, sans-serif;
-       font-size: 14px;
-      }
-      .center { margin-left:auto; margin-right:auto; }
-      .help {cursor:help; border-bottom: 1px dotted #A9A9A9}
-    </style>
+     <style type="text/css">
+  #formwrap {
+   line-height: 2em;
+   background: #eef;
+   margin: 10px;
+   padding: 10px;
+   height: 500px;
+  }
+  body {
+   font-family: "Lucida Grande", "Lucida Sans Unicode", Verdana, Arial, Helvetica, sans-serif;
+   font-size: 14px;
+  }
+  .center { margin-left:auto; margin-right:auto; }
+  .help {cursor:help; border-bottom: 1px dotted #A9A9A9}
+ </style>
+
     <script>
         $(function() {
+
+            $.fn.serializeObject = function() {
+                 var o = {};
+                 var a = this.serializeArray();
+                 $.each( a, function() {
+                   if( o[this.name] != null ) {
+                     if( !o[this.name].push ) {
+                       o[this.name] = [o[this.name]];
+                     }
+                     o[this.name].push(this.value || '');
+                   } else {
+                     o[this.name] = this.value || '';
+                   }
+                  });
+                  return o;
+            };
+
             function populateLibType(selectorID) {
                 $('#'+selectorID).empty();
                 var runtypeUrl = '/rundb/api/v1/content/?format=json';
@@ -50,18 +66,42 @@
                 });
             }
 
+
             // populate Library Type selector
             populateLibType("targetregions");
             populateLibType("exonicregions");
 
+            $("#postbutton").show();
+            $('#postbutton').click(function() {
+
+                obj = $('#gapsInCoverage').serializeObject();
+                console.log(obj)
+
+                pluginAPIJSON = { "plugin" : [TB_plugin.fields.name], "pluginconfig" : obj };
+                pluginAPIJSON = JSON.stringify(pluginAPIJSON);
+                pluginURL = "/rundb/api/v1/results/" + TB_result + "/plugin/";
+                $.ajax({
+                    type: 'POST',
+                    url: pluginURL,
+                    async: false,
+                    contentType: "application/json; charset=utf-8",
+                    success: function (data) {
+                        $("#json_result").html('<div style="text-align: center;"><p>Choo Choo! All aboard the plugin train!</p></div>');
+                        setTimeout("parent.$.fn.colorbox.close()",1000);
+                    },
+                    data: pluginAPIJSON,
+                    dataType: "json"
+                });
+            });
         });
     </script>
 </head>
+
 <body>
- <form id="gapsInCoverage" name="gapsInCoverage">
-     <div style="text-align:center">
-         <h1>Gaps in Coverage Plugin</h1>
-     </div>
+    <form id="gapsInCoverage" name="gapsInCoverage">
+        <div style="text-align:center">
+           <h1>Gaps in Coverage Plugin</h1>
+        </div>
         <table class="center" cellpadding="5px">
             <tr id="targetselect">
              <td><span class="help"
@@ -84,6 +124,21 @@
                Min. Exon Coverage:</span></td>
              <td><input type="text" size=6 id="minexoncov" name="minexoncov" value=50></select></td> </tr>
         </table>
- </form>
+
+        <br/>
+        <div align="center" id="json_result">
+         <input id="postbutton" type="submit" value="Submit" >
+        </div>
+        <br/>
+
+        <div align="left">
+            <h3>Description and Usage Notes</h3>
+            <p>
+                This plugin generates a list of amplicon bases with coverage below the specified threshold.</p>
+            <p>
+                Exonic and intronic regions can have different coverage thresholds if an exonic BED file is provided.
+            </p>
+           </div>
+    </form>
 </body>
 </html>

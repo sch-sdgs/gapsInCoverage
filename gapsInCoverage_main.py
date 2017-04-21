@@ -8,6 +8,7 @@ import subprocess
 from helpers import FileParsers
 import re
 import xlsxwriter
+import requests
 
 l={}
 
@@ -23,7 +24,8 @@ def remove_header(bedfile, results_dir, prefix):
             if 'track' in line:
                 continue
             else:
-                new_bed.write(line)
+                new_line = re.sub('_NM.*', '', line)
+                new_bed.write(new_line)
     return new_bed
 
 def runsambamba(results_dir, bedfile, barcode, bam, max_cov=None, prefix=None):
@@ -123,6 +125,11 @@ def start(jsonfile):
     info = {}
     results_dir = data['runinfo']['plugin']['results_dir']
     run_name = data['expmeta']['results_name']
+    api_url = data['runinfo']['api_url'] + '/v1/pluginresult/' + str(data['runinfo']['pluginresult'])
+    api_data = requests.get(api_url, params={'format':'json'},auth=('ionadmin','ionadmin'))
+    api_json = api_data.json()
+    bed_file = api_json['config']['targetregions']
+    exonic_file = api_json['config']['exonicregions']
     if not os.path.isdir('/results/for_review/' + run_name):
         os.mkdir('/results/for_review/' + run_name)
     print "Results directory: "
@@ -132,11 +139,11 @@ def start(jsonfile):
             info[barcode] = {}
             info[barcode]["sample"] = sample_name
             print "Sample = ", info[barcode]["sample"]
-            info[barcode]["bed"] = data["plan"]["barcodedSamples"][sample_name]["barcodeSampleInfo"][barcode]["targetRegionBedFile"]
+            info[barcode]["bed"] = bed_file
             print "BED = ", info[barcode]["bed"]
-            info[barcode]["bed"] = '/results/uploads/BED/4/hg19/unmerged/detail/ADPKDv3.bed'
+            # info[barcode]["bed"] = '/results/uploads/BED/4/hg19/unmerged/detail/ADPKDv3.bed'
 
-            info[barcode]["exonicbed"] = '/results/uploads/BED/7/hg19/unmerged/detail/PKD_exonic.bed'
+            info[barcode]["exonicbed"] = exonic_file
             # if 'PKD' in info[barcode]["bed"]:
             #     info[barcode]["exonicbed"] = '/results/uploads/BED/61/hg19_PKD_pseudogenes_masked/unmerged/detail/PKD_exonic.bed'
             # elif 'NBS1' in info[barcode]["bed"]:
@@ -177,8 +184,8 @@ def start(jsonfile):
         bed_name = os.path.basename(info[barcode]["bed"]).replace(".bed", "")
 
         depth_base_file = runsambamba(results_dir, os.path.join(results_dir, (bed_name+'_noheader.bed')), barcode, bam)
-        exonic_gaps = runsambamba(results_dir, os.path.join(results_dir, (bed_name+'_exonic_noheader.bed')), barcode, bam, 49, '_exonic')
-        intronic_gaps = runsambamba(results_dir, os.path.join(results_dir, (bed_name+'_intronic_noheader.bed')), barcode, bam, 29, '_intronic')
+        exonic_gaps = runsambamba(results_dir, os.path.join(results_dir, (bed_name+'_exonic_noheader.bed')), barcode, bam, int(api_json['config']['minexoncov']) - 1, '_exonic')
+        intronic_gaps = runsambamba(results_dir, os.path.join(results_dir, (bed_name+'_intronic_noheader.bed')), barcode, bam, int(api_json['config']['minintroncov']) - 1, '_intronic')
         total_gaps = int(exonic_gaps + intronic_gaps)
         print "Gaps in exons: " + str(exonic_gaps)
         print "Gaps in introns: " + str(intronic_gaps)
@@ -189,7 +196,7 @@ def start(jsonfile):
             for line in regions_file:
                 if 'chrom' not in line:
                     array = line.split('\t')
-                    region = re.sub('_NM.*', '', array[3])
+                    region = array[3]
                     cov_hash[region] = array[-2]
 
         ##generate gaps files
@@ -208,59 +215,59 @@ def start(jsonfile):
             for line in afile:
                 if 'region' not in line:
                     array = line.split('\t')
-                    region = array[2]
-                    new_region = re.sub('_NM.*', '', region)
+                    region = array[2].rstrip('\r')
+                    #region = re.sub('_NM.*', '', region)
                     if region not in seen_regions:
                         if region not in cov_hash:
                             print "Error - region not in cov_hash"
                         else:
                             print info[barcode]["sample"]
-                            print new_region
+                            print region
                             ## fix this bit ##
                             if cov_hash[region] == '100':
-                                gap_hash['introns'].append(new_region)
-                                if new_region not in sample_gaps['intronic']:
-                                    sample_gaps['intronic'][new_region] = {}
-                                sample_gaps['intronic'][new_region][sp] = {}
-                                sample_gaps['intronic'][new_region][sp][1] = {}
-                                sample_gaps['intronic'][new_region][sp][1]['start'] = array[0]+':'+str(array[1])
-                                sample_gaps['intronic'][new_region][sp][1]['stop'] = array[0] + ':' + str(array[1])
+                                gap_hash['introns'].append(region)
+                                if region not in sample_gaps['intronic']:
+                                    sample_gaps['intronic'][region] = {}
+                                sample_gaps['intronic'][region][sp] = {}
+                                sample_gaps['intronic'][region][sp][1] = {}
+                                sample_gaps['intronic'][region][sp][1]['start'] = array[0]+':'+str(array[1])
+                                sample_gaps['intronic'][region][sp][1]['stop'] = array[0] + ':' + str(array[1])
                                 flag = 1
-                                # if new_region in sample_gaps['intronic']:
-                                #     sample_gaps['intronic'][new_region]['samples'].append(info[barcode]["sample"])
+                                # if region in sample_gaps['intronic']:
+                                #     sample_gaps['intronic'][region]['samples'].append(info[barcode]["sample"])
                                 # else:
-                                #     sample_gaps['intronic'][new_region] = {'samples': [info[barcode]["sample"]]}
+                                #     sample_gaps['intronic'][region] = {'samples': [info[barcode]["sample"]]}
                             else:
-                                gap_hash['exons'].append(new_region)
-                                if new_region not in sample_gaps['exonic']:
-                                    sample_gaps['exonic'][new_region] = {}
-                                sample_gaps['exonic'][new_region][sp]={}
-                                sample_gaps['exonic'][new_region][sp][1]={}
-                                sample_gaps['exonic'][new_region][sp][1]['start'] = array[0] + ':' + str(array[1])
-                                sample_gaps['exonic'][new_region][sp][1]['stop'] = array[0] + ':' + str(array[1])
+                                gap_hash['exons'].append(region)
+                                if region not in sample_gaps['exonic']:
+                                    sample_gaps['exonic'][region] = {}
+                                sample_gaps['exonic'][region][sp]={}
+                                sample_gaps['exonic'][region][sp][1]={}
+                                sample_gaps['exonic'][region][sp][1]['start'] = array[0] + ':' + str(array[1])
+                                sample_gaps['exonic'][region][sp][1]['stop'] = array[0] + ':' + str(array[1])
                                 flag = 1
-                                # if new_region in sample_gaps['exonic']:
-                                #     sample_gaps['exonic'][new_region]['samples'].append(info[barcode]["sample"])
+                                # if region in sample_gaps['exonic']:
+                                #     sample_gaps['exonic'][region]['samples'].append(info[barcode]["sample"])
                                 # else:
-                                #     sample_gaps['exonic'][new_region] = {'samples': [info[barcode]["sample"]]}
+                                #     sample_gaps['exonic'][region] = {'samples': [info[barcode]["sample"]]}
                         seen_regions.append(region)
                     else:
                         if cov_hash[region] == '100':
-                            if (int(array[1]) - int(sample_gaps['intronic'][new_region][sp][flag]['stop'].split(':')[1])) == 1:
-                                sample_gaps['intronic'][new_region][sp][flag]['stop'] = array[0] + ':' + str(array[1])
+                            if (int(array[1]) - int(sample_gaps['intronic'][region][sp][flag]['stop'].split(':')[1])) == 1:
+                                sample_gaps['intronic'][region][sp][flag]['stop'] = array[0] + ':' + str(array[1])
                             else:
                                 flag+=1
-                                sample_gaps['intronic'][new_region][sp][flag] = {}
-                                sample_gaps['intronic'][new_region][sp][flag]['start'] = array[0] + ':' + str(array[1])
-                                sample_gaps['intronic'][new_region][sp][flag]['stop'] = array[0] + ':' + str(array[1])
+                                sample_gaps['intronic'][region][sp][flag] = {}
+                                sample_gaps['intronic'][region][sp][flag]['start'] = array[0] + ':' + str(array[1])
+                                sample_gaps['intronic'][region][sp][flag]['stop'] = array[0] + ':' + str(array[1])
                         else:
-                            if (int(array[1]) - int(sample_gaps['exonic'][new_region][sp][flag]['stop'].split(':')[1])) == 1:
-                                sample_gaps['exonic'][new_region][sp][flag]['stop'] = array[0] + ':' + str(array[1])
+                            if (int(array[1]) - int(sample_gaps['exonic'][region][sp][flag]['stop'].split(':')[1])) == 1:
+                                sample_gaps['exonic'][region][sp][flag]['stop'] = array[0] + ':' + str(array[1])
                             else:
                                 flag+=1
-                                sample_gaps['exonic'][new_region][sp][flag]={}
-                                sample_gaps['exonic'][new_region][sp][flag]['start'] = array[0] + ':' + str(array[1])
-                                sample_gaps['exonic'][new_region][sp][flag]['stop'] = array[0] + ':' + str(array[1])
+                                sample_gaps['exonic'][region][sp][flag]={}
+                                sample_gaps['exonic'][region][sp][flag]['start'] = array[0] + ':' + str(array[1])
+                                sample_gaps['exonic'][region][sp][flag]['stop'] = array[0] + ':' + str(array[1])
 
 
         ### Parse depth base bed file ###
