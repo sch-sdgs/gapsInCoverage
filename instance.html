@@ -45,17 +45,22 @@
                     $.each( data.objects, function(intIndex, result){
                         //var bedfile = result.name;
                         //var type = result.upload_type;
+                        var meta = result.meta;
+                        console.log(meta);
+                        var hotspot = meta.hotspot;
+                        console.log(hotspot);
+                        var enabled = meta.enabled;
                         var file_path = result.file;
                         var bedfile = file_path.split('/')[8];
                         if (files.indexOf(bedfile) <0) {
                             if (selectorID == "exonicregions") {
-                                if (file_path.includes("exonic") && file_path.includes("detail") && result.enabled == "true" && result.hotspot == "false") {
+                                if (file_path.includes("exonic") && file_path.includes("detail") && enabled == true && hotspot == false) {
                                     $('#' + selectorID).append("<option value='" + file_path + "'>" + bedfile + "</option>");
                                     files.push(bedfile);
                                 }
                             }
                             if (selectorID == "targetregions") {
-                                if (!bedfile.includes("exonic") && file_path.includes("detail") && result.enabled == "true" && result.hotspot == "false") {
+                                if (!bedfile.includes("exonic") && file_path.includes("detail") && enabled == true && hotspot == false) {
                                     $('#' + selectorID).append("<option value='" + file_path + "'>" + bedfile + "</option>");
                                     files.push(bedfile);
                                 }
