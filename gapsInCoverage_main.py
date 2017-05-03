@@ -32,9 +32,9 @@ def runsambamba(results_dir, bedfile, barcode, bam, max_cov=None, prefix=None):
     print "Running Sambamba " + barcode
     if prefix:
         outputfile = os.path.join(results_dir, (barcode + prefix + '_depth_base.txt'))
-        run_command('/home/ionadmin/sambamba_v0.6.5 depth base -o ' + outputfile + ' -m -c 0 -q 0 -L ' + bedfile + ' ' + bam)
+        run_command('%s/bin/sambamba_v0.6.5 depth base -o ' + outputfile + ' -m -c 0 -q 0 -L ' + bedfile + ' ' + bam)
         outputfile_filtered = os.path.join(results_dir, (barcode + prefix + '_depth_base_filtered.txt'))
-        run_command('/home/ionadmin/sambamba_v0.6.5 depth base -o ' + outputfile_filtered + ' -m -c 0 -C ' + str(max_cov) + ' -q 0 -L ' + bedfile + ' ' + bam)
+        run_command('%s/bin/sambamba_v0.6.5 depth base -o ' + outputfile_filtered + ' -m -c 0 -C ' + str(max_cov) + ' -q 0 -L ' + bedfile + ' ' + bam)
         num_lines = sum(1 for line in open(outputfile_filtered))
         return num_lines - 1
     else:
@@ -168,7 +168,7 @@ def start(jsonfile):
                 exonic_bed_no_header.close()
 
                 print "Subtracting BEDs to generate intronic BED\n"
-                run_command('/home/ionadmin/bedtools2/bin/subtractBed -a '+ os.path.join(results_dir, (bed_name + '_noheader.bed')) + ' -b ' + os.path.join(results_dir, (bed_name + '_exonic_noheader.bed')) + ' > ' + os.path.join(results_dir, (bed_name + '_intronic_noheader.bed')))
+                run_command('%s/bin/subtractBed -a '+ os.path.join(results_dir, (bed_name + '_noheader.bed')) + ' -b ' + os.path.join(results_dir, (bed_name + '_exonic_noheader.bed')) + ' > ' + os.path.join(results_dir, (bed_name + '_intronic_noheader.bed')))
 
 
     bam_dir = data["runinfo"]["alignment_dir"]
@@ -190,7 +190,7 @@ def start(jsonfile):
         print "Gaps in exons: " + str(exonic_gaps)
         print "Gaps in introns: " + str(intronic_gaps)
         print "Total gaps: " + str(total_gaps)
-        run_command('/home/ionadmin/sambamba_v0.6.5 depth region -o ' + os.path.join(results_dir, (barcode + '_exonic_depth_region.txt')) + ' -c 0 -T 50 -q 0 -L ' + bed_name+'_exonic_noheader.bed ' + bam)
+        run_command('%s/bin/sambamba_v0.6.5 depth region -o ' + os.path.join(results_dir, (barcode + '_exonic_depth_region.txt')) + ' -c 0 -T 50 -q 0 -L ' + bed_name+'_exonic_noheader.bed ' + bam)
         cov_hash={}
         with open (os.path.join(results_dir, (barcode + '_exonic_depth_region.txt'))) as regions_file:
             for line in regions_file:
@@ -204,7 +204,7 @@ def start(jsonfile):
         gaps_in_sequencing = os.path.join(results_dir, barcode + '_gaps_in_sequencing.txt')
         alamut_file = os.path.join(results_dir, barcode + '_gaps_in_sequencing_alamut.txt')
 
-        run_command(('/home/ionadmin/bedtools2/bin/intersectBed -wb -a ' + os.path.join(results_dir, (bed_name+'_noheader.bed')) + ' -b ' + gaps_bed_file + ' | cut -f1,2,4,12 | awk \'BEGIN{print "chromosome\tbp_pos\tregion\tdepth"}1\' > ' + gaps_in_sequencing))
+        run_command(('%s/bin/intersectBed -wb -a ' + os.path.join(results_dir, (bed_name+'_noheader.bed')) + ' -b ' + gaps_bed_file + ' | cut -f1,2,4,12 | awk \'BEGIN{print "chromosome\tbp_pos\tregion\tdepth"}1\' > ' + gaps_in_sequencing))
         run_command(('awk \'NR==1 {print $0} NR>1 {print ($1"\t"$2+1"\t"$3"\t"$4)}\' ' + gaps_in_sequencing + ' > ' + alamut_file))
         with open (alamut_file) as afile:
             sp = info[barcode]["sample"]
