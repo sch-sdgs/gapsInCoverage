@@ -39,7 +39,7 @@
 
             function populateLibType(selectorID) {
                 $('#'+selectorID).empty();
-                var runtypeUrl = '/rundb/api/v1/content/?format=json';
+                var runtypeUrl = '/rundb/api/v1/content/?format=json&limit=100';
                 var files=[];
                 $.get( runtypeUrl, function(data) {
                     $.each( data.objects, function(intIndex, result){
@@ -49,13 +49,13 @@
                         var bedfile = file_path.split('/')[8];
                         if (files.indexOf(bedfile) <0) {
                             if (selectorID == "exonicregions") {
-                                if (file_path.includes("exonic") && file_path.includes("detail")) {
+                                if (file_path.includes("exonic") && file_path.includes("detail") && result.enabled == "true" && result.hotspot == "false") {
                                     $('#' + selectorID).append("<option value='" + file_path + "'>" + bedfile + "</option>");
                                     files.push(bedfile);
                                 }
                             }
                             if (selectorID == "targetregions") {
-                                if (!bedfile.includes("exonic") && file_path.includes("detail")) {
+                                if (!bedfile.includes("exonic") && file_path.includes("detail") && result.enabled == "true" && result.hotspot == "false") {
                                     $('#' + selectorID).append("<option value='" + file_path + "'>" + bedfile + "</option>");
                                     files.push(bedfile);
                                 }
@@ -86,7 +86,7 @@
                     async: false,
                     contentType: "application/json; charset=utf-8",
                     success: function (data) {
-                        $("#json_result").html('<div style="text-align: center;"><p>Choo Choo! All aboard the plugin train!</p></div>');
+                        $("#json_result").html('<div style="text-align: center;"><p>Launching plugin</p></div>');
                         setTimeout("parent.$.fn.colorbox.close()",1000);
                     },
                     data: pluginAPIJSON,
