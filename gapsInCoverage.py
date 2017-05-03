@@ -5,7 +5,7 @@ from subprocess import *
 from ion.plugin import *
 from django.conf import settings
 from django.template.loader import render_to_string
-
+import os
 
 
 class gapsInCoverage(IonPlugin):
