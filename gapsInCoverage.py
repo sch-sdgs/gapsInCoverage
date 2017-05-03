@@ -1,20 +1,10 @@
 #!/usr/bin/env python
 # gapsInCoverage plugin
-import os
-import glob
 import json
-import numpy
-import traceback
-import pysam
-import subprocess
-import requests
-from ion.utils import blockprocessing
 from subprocess import *
 from ion.plugin import *
 from django.conf import settings
-from django import template
 from django.template.loader import render_to_string
-from django.conf import global_settings
 
 
 
